@@ -1,0 +1,6 @@
+{
+  "name": "Absensi Murid",
+  "description": "Aplikasi Absensi Murid Sekolah - Catat Kehadiran, Riwayat, Laporan, Data Murid, Notifikasi, dan Keamanan Data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
