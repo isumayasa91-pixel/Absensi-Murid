@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "students": {
+      "title": "Students",
+      "description": "Daftar murid sekolah",
+      "type": "document",
+      "schema": {
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "nisn": { "type": "string" },
+          "classId": { "type": "string" },
+          "gender": { "type": "string" },
+          "parentPhone": { "type": "string" },
+          "address": { "type": "string" }
+        },
+        "required": ["id", "name", "nisn", "classId"]
+      }
+    },
+    "classes": {
+      "title": "Classes",
+      "description": "Daftar kelas",
+      "type": "document",
+      "schema": {
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "homeroomTeacher": { "type": "string" },
+          "academicYear": { "type": "string" }
+        },
+        "required": ["id", "name"]
+      }
+    },
+    "sessions": {
+      "title": "Attendance Sessions",
+      "description": "Sesi absensi harian",
+      "type": "document",
+      "schema": {
+        "properties": {
+          "id": { "type": "string" },
+          "date": { "type": "string" },
+          "time": { "type": "string" },
+          "classId": { "type": "string" },
+          "subject": { "type": "string" },
+          "recordedBy": { "type": "string" },
+          "entries": { "type": "array" }
+        },
+        "required": ["id", "date", "classId"]
+      }
+    },
+    "userProfiles": {
+      "title": "User Profiles",
+      "description": "Profil pengguna / akun",
+      "type": "document",
+      "schema": {
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "role": { "type": "string" },
+          "schoolName": { "type": "string" },
+          "nipOrNisn": { "type": "string" },
+          "userType": { "type": "string" },
+          "className": { "type": "string" },
+          "avatarUrl": { "type": "string" },
+          "phone": { "type": "string" },
+          "email": { "type": "string" }
+        },
+        "required": ["id", "name", "userType"]
+      }
+    }
+  }
+}

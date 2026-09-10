@@ -30,11 +30,29 @@ import {
   initialNotifications,
 } from './data/initialData';
 
+import {
+  subscribeStudents,
+  subscribeClasses,
+  subscribeSessions,
+  subscribeNotifications,
+  subscribeSchoolSettings,
+  saveStudentToCloud,
+  deleteStudentFromCloud,
+  saveBulkStudentsToCloud,
+  saveClassToCloud,
+  deleteClassFromCloud,
+  saveSessionToCloud,
+  deleteSessionFromCloud,
+  saveNotificationToCloud,
+  saveSchoolNameToCloud,
+  seedInitialDataIfEmpty,
+} from './lib/firebase';
+
 import { AppLogo } from './components/AppLogo';
-import { ShieldCheck, Heart } from 'lucide-react';
+import { ShieldCheck, Heart, CloudCheck } from 'lucide-react';
 
 export default function App() {
-  // Load initial or persisted state from LocalStorage
+  // Load initial or persisted state from LocalStorage & Cloud
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -96,6 +114,44 @@ export default function App() {
     return localStorage.getItem('absensi_is_logged_in') === 'true';
   });
 
+  // Real-time Firestore Cloud Subscription & Seeding
+  useEffect(() => {
+    // Seed default data if database is brand new
+    seedInitialDataIfEmpty(initialClasses, initialStudents, initialSessions, initialNotifications);
+
+    // Subscribe to Firestore live collections for cross-device sync
+    const unsubStudents = subscribeStudents((data) => {
+      if (data && data.length > 0) setStudents(data);
+    });
+
+    const unsubClasses = subscribeClasses((data) => {
+      if (data && data.length > 0) setClasses(data);
+    });
+
+    const unsubSessions = subscribeSessions((data) => {
+      if (data) setSessions(data);
+    });
+
+    const unsubNotifs = subscribeNotifications((data) => {
+      if (data) setNotifications(data);
+    });
+
+    const unsubSchool = subscribeSchoolSettings((name) => {
+      if (name && name.trim()) {
+        setSchoolName(name.trim());
+        setUserProfile((prev) => ({ ...prev, schoolName: name.trim() }));
+      }
+    });
+
+    return () => {
+      unsubStudents();
+      unsubClasses();
+      unsubSessions();
+      unsubNotifs();
+      unsubSchool();
+    };
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('absensi_school_name', schoolName);
   }, [schoolName]);
@@ -117,6 +173,7 @@ export default function App() {
       ...prev,
       schoolName: clean,
     }));
+    saveSchoolNameToCloud(clean);
   };
 
   const handleLoginSuccess = (user: UserProfile) => {
@@ -128,6 +185,7 @@ export default function App() {
     if (finalUser.schoolName) {
       setSchoolName(finalUser.schoolName);
       localStorage.setItem('absensi_school_name', finalUser.schoolName);
+      saveSchoolNameToCloud(finalUser.schoolName);
     }
     setIsLoggedIn(true);
     setActiveTab('home');
@@ -163,6 +221,7 @@ export default function App() {
   // Save new attendance session
   const handleSaveSession = (newSession: AttendanceSession) => {
     setSessions((prev) => [newSession, ...prev]);
+    saveSessionToCloud(newSession);
 
     // Check if any student was marked ALPA or SAKIT to auto-generate notification
     const classObj = classes.find((c) => c.id === newSession.classId);
@@ -172,7 +231,7 @@ export default function App() {
     const newNotifItems: NotificationItem[] = [];
 
     if (alpaCount > 0) {
-      newNotifItems.push({
+      const item: NotificationItem = {
         id: `notif-${Date.now()}-1`,
         title: 'Siswa Alpa Terdeteksi',
         message: `Terdapat ${alpaCount} siswa Alpa di ${classObj?.name || 'Kelas'} pada ${newSession.date}. Sebaiknya kirim peringatan ke orang tua.`,
@@ -180,11 +239,13 @@ export default function App() {
         timestamp: Date.now(),
         read: false,
         classId: newSession.classId,
-      });
+      };
+      newNotifItems.push(item);
+      saveNotificationToCloud(item);
     }
 
     if (sakitCount > 0) {
-      newNotifItems.push({
+      const item: NotificationItem = {
         id: `notif-${Date.now()}-2`,
         title: 'Siswa Sakit Dicatat',
         message: `Terdapat ${sakitCount} siswa Sakit di ${classObj?.name || 'Kelas'}.`,
@@ -192,10 +253,12 @@ export default function App() {
         timestamp: Date.now(),
         read: false,
         classId: newSession.classId,
-      });
+      };
+      newNotifItems.push(item);
+      saveNotificationToCloud(item);
     }
 
-    newNotifItems.push({
+    const savedItem: NotificationItem = {
       id: `notif-${Date.now()}-3`,
       title: 'Absensi Tersimpan',
       message: `Absensi ${classObj?.name || 'Kelas'} tanggal ${newSession.date} berhasil disimpan.`,
@@ -203,7 +266,9 @@ export default function App() {
       timestamp: Date.now(),
       read: false,
       classId: newSession.classId,
-    });
+    };
+    newNotifItems.push(savedItem);
+    saveNotificationToCloud(savedItem);
 
     setNotifications((prev) => [...newNotifItems, ...prev]);
   };
@@ -213,32 +278,39 @@ export default function App() {
     setSessions((prev) =>
       prev.map((s) => (s.id === updatedSession.id ? updatedSession : s))
     );
+    saveSessionToCloud(updatedSession);
   };
 
   const handleDeleteSession = (sessionId: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    deleteSessionFromCloud(sessionId);
   };
 
   // Student CRUD
   const handleAddStudent = (newStudent: Student) => {
     setStudents((prev) => [newStudent, ...prev]);
+    saveStudentToCloud(newStudent);
   };
 
   const handleBulkAddStudents = (importedStudents: Student[], importedClasses?: ClassGroup[]) => {
+    let classesToSave: ClassGroup[] = [];
     if (importedClasses && importedClasses.length > 0) {
       setClasses((prev) => {
         const existingNames = new Set(prev.map((c) => c.name.toLowerCase()));
-        const toAdd = importedClasses.filter((c) => !existingNames.has(c.name.toLowerCase()));
-        return [...prev, ...toAdd];
+        classesToSave = importedClasses.filter((c) => !existingNames.has(c.name.toLowerCase()));
+        return [...prev, ...classesToSave];
       });
     }
     setStudents((prev) => [...importedStudents, ...prev]);
+    saveBulkStudentsToCloud(importedStudents, classesToSave);
   };
 
   const handleEditStudent = (updatedStudent: Student) => {
     setStudents((prev) =>
       prev.map((s) => (s.id === updatedStudent.id ? updatedStudent : s))
     );
+    saveStudentToCloud(updatedStudent);
+
     // If student is logged in and updates their own record, sync userProfile
     if (
       userProfile.userType === 'SISWA' &&
@@ -266,6 +338,7 @@ export default function App() {
       const cleanSchool = updated.schoolName.trim();
       setSchoolName(cleanSchool);
       localStorage.setItem('absensi_school_name', cleanSchool);
+      saveSchoolNameToCloud(cleanSchool);
     }
     setUserProfile(updated);
     if (updated.userType === 'SISWA') {
@@ -277,7 +350,7 @@ export default function App() {
             (updated.nis && s.nis === updated.nis) ||
             s.name.toLowerCase() === updated.name.toLowerCase()
           ) {
-            return {
+            const updatedS = {
               ...s,
               name: updated.name,
               avatarUrl: updated.avatarUrl,
@@ -286,6 +359,8 @@ export default function App() {
               parentPhone: updated.parentPhone || s.parentPhone,
               isCustomPhoto: updated.isCustomPhoto,
             };
+            saveStudentToCloud(updatedS);
+            return updatedS;
           }
           return s;
         })
@@ -295,26 +370,35 @@ export default function App() {
 
   const handleDeleteStudent = (studentId: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== studentId));
+    deleteStudentFromCloud(studentId);
   };
 
   const handleDeleteStudentsByClass = (classId: string) => {
+    const toDelete = students.filter((s) => s.classId === classId);
+    toDelete.forEach((s) => deleteStudentFromCloud(s.id));
     setStudents((prev) => prev.filter((s) => s.classId !== classId));
   };
 
   // Class CRUD
   const handleAddClass = (newClass: ClassGroup) => {
     setClasses((prev) => [...prev, newClass]);
+    saveClassToCloud(newClass);
   };
 
   const handleEditClass = (updatedClass: ClassGroup) => {
     setClasses((prev) =>
       prev.map((c) => (c.id === updatedClass.id ? updatedClass : c))
     );
+    saveClassToCloud(updatedClass);
   };
 
   const handleDeleteClass = (classId: string) => {
     setClasses((prev) => prev.filter((c) => c.id !== classId));
-    // Also remove students in that deleted class or set to first available
+    deleteClassFromCloud(classId);
+
+    // Also remove students in that deleted class
+    const toDelete = students.filter((s) => s.classId === classId);
+    toDelete.forEach((s) => deleteStudentFromCloud(s.id));
     setStudents((prev) => prev.filter((s) => s.classId !== classId));
   };
 
